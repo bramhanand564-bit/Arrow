@@ -14,7 +14,7 @@
 </head>
 <body>
 
-<!-- Shiny 3D Gold Coin SVG -->
+<!-- Reusable Shiny 3D Gold Coin SVG -->
 <svg width="0" height="0" style="position:absolute">
   <defs>
     <radialGradient id="goldCoinGrad" cx="35%" cy="30%" r="70%">
@@ -40,7 +40,7 @@
 
 <div id="viewport">
 
-  <!-- 1. HOME SCREEN -->
+  <!-- ===================== 1. HOME SCREEN ===================== -->
   <section class="screen active" id="screenHome">
     <canvas id="homeBgCanvas"></canvas>
 
@@ -98,7 +98,7 @@
     </div>
   </section>
 
-  <!-- 2. LEVELS BLOCKS SCREEN -->
+  <!-- ===================== 2. LEVELS BLOCKS SCREEN ===================== -->
   <section class="screen" id="screenLevels">
     <div class="page-header">
       <button class="icon-circle" id="levelsBackBtn">←</button>
@@ -113,11 +113,24 @@
     </div>
   </section>
 
-  <!-- 3. GAMEPLAY SCREEN -->
+  <!-- ===================== 3. GAMEPLAY SCREEN ===================== -->
   <section class="screen" id="screenGame">
     <canvas id="gameCanvas"></canvas>
 
-    <div class="game-hud">
+    <!-- Filmy Bullet-Time Cinema Letterbox Bars -->
+    <div class="cinema-bar top" id="cinemaTop"></div>
+    <div class="cinema-bar bottom" id="cinemaBot"></div>
+
+    <!-- Red Damage Edge Vignette -->
+    <div id="damageFlash"></div>
+
+    <!-- Animated Victory / Intro Banner -->
+    <div id="victoryBanner"></div>
+
+    <!-- Dynamic FX Layer (Heart Shatter Shards + Flying Coins) -->
+    <div id="fxLayer"></div>
+
+    <div class="game-hud" id="gameHud">
       <div class="hud-row">
         <div style="display:flex; gap:6px; align-items:center;">
           <button class="hud-pill" id="gameHomeBtn" title="Home">🏠</button>
@@ -125,7 +138,7 @@
           <div class="hud-pill" id="gameLevelPill">LVL 1</div>
         </div>
 
-        <div class="hearts-pill">
+        <div class="hearts-pill" id="heartsPill">
           <span class="heart" id="h1">❤️</span>
           <span class="heart" id="h2">❤️</span>
           <span class="heart" id="h3">❤️</span>
@@ -151,73 +164,92 @@
 
     <div id="toastBanner"></div>
 
-    <div class="bottom-dock">
+    <!-- Theme-Synced Bottom Power Dock -->
+    <div class="bottom-dock" id="bottomDock">
       <button class="tool-btn" id="btnHint">
-        <span>💡</span><span class="tool-lbl" data-i18n="hint">Hint</span>
+        <span class="tool-ico">💡</span>
+        <span class="tool-lbl" data-i18n="hint">Hint</span>
         <span class="tool-badge" id="badgeHint">3</span>
       </button>
       <button class="tool-btn" id="btnHammer">
-        <span>🔨</span><span class="tool-lbl" data-i18n="smash">Smash</span>
+        <span class="tool-ico">🔨</span>
+        <span class="tool-lbl" data-i18n="smash">Smash</span>
         <span class="tool-badge" id="badgeHammer">2</span>
       </button>
       <button class="tool-btn" id="btnFreeze">
-        <span>⏳</span><span class="tool-lbl">+3 Mv</span>
+        <span class="tool-ico">⏳</span>
+        <span class="tool-lbl">+3 Mv</span>
         <span class="tool-badge" id="badgeFreeze">2</span>
       </button>
       <button class="tool-btn" id="btnNova">
-        <span>💥</span><span class="tool-lbl" data-i18n="blast">Blast</span>
+        <span class="tool-ico">💥</span>
+        <span class="tool-lbl" data-i18n="blast">Blast</span>
         <span class="tool-badge" id="badgeNova">1</span>
       </button>
       <button class="tool-btn" id="btnGrid">
-        <span>#</span><span class="tool-lbl" data-i18n="guide">Guide</span>
+        <span class="tool-ico">#</span>
+        <span class="tool-lbl" data-i18n="guide">Guide</span>
       </button>
       <button class="tool-btn" id="btnFit">
-        <span>🎯</span><span class="tool-lbl" data-i18n="fit">Fit</span>
+        <span class="tool-ico">🎯</span>
+        <span class="tool-lbl" data-i18n="fit">Fit</span>
       </button>
     </div>
   </section>
 </div>
 
-<!-- WIN / LOSE RESULT MODAL -->
+<!-- ===================== STYLISH WIN / LOSE MODAL ===================== -->
 <div class="modal-bg" id="resultModal">
-  <div class="modal-card">
+  <div class="modal-card themed-modal win-card">
+    <div class="win-glow-ring"></div>
+    <div class="win-badge-top" id="resTopBadge">🏆</div>
     <h2 class="m-title" id="resTitle">Level Complete!</h2>
-    <p class="m-sub" id="resSub">Awesome move!</p>
-    <div class="stars-big" id="resStars">⭐⭐⭐</div>
+    <p class="m-sub" id="resSub">Awesome!</p>
+
+    <!-- Individually Animated Popping Stars -->
+    <div class="stars-anim-row">
+      <span class="anim-star" id="star1">⭐</span>
+      <span class="anim-star" id="star2">⭐</span>
+      <span class="anim-star" id="star3">⭐</span>
+    </div>
 
     <div class="stat-row">
       <div class="stat-card">
         <div class="stat-v" id="resTime">00:18</div>
         <div class="stat-k" data-i18n="time">Time</div>
       </div>
-      <div class="stat-card">
+      <div class="stat-card highlight-coin">
         <div class="stat-v">
-          <svg class="coin-svg" style="width:18px;height:18px"><use href="#icon-coin"/></svg>
+          <svg class="coin-svg" style="width:20px;height:20px"><use href="#icon-coin"/></svg>
           <span id="resCoins">+25</span>
         </div>
         <div class="stat-k" data-i18n="reward">Reward</div>
       </div>
       <div class="stat-card">
-        <div class="stat-v" style="color:#2563eb;" id="resIq">IQ 108</div>
+        <div class="stat-v" style="color:var(--ui-accent);" id="resIq">IQ 108</div>
         <div class="stat-k" data-i18n="mindIq">IQ Score</div>
       </div>
     </div>
 
     <div id="themeUnlockNotice" class="unlock-notice"></div>
 
-    <button class="btn-main" id="resPrimaryBtn">Next Level ➡️</button>
-    <button class="btn-ghost" id="resSecondaryBtn">Replay Level 🔄</button>
+    <button class="btn-main shimmer-btn" id="resPrimaryBtn">Next Level ➡️</button>
+
+    <div class="modal-action-row">
+      <button class="btn-ghost" id="resSecondaryBtn">🔄 Replay</button>
+      <button class="btn-ghost" id="resHomeBtn">🏠 Home</button>
+    </div>
   </div>
 </div>
 
-<!-- SETTINGS MODAL -->
+<!-- ===================== STYLISH SETTINGS MODAL ===================== -->
 <div class="modal-bg" id="settingsModal">
-  <div class="modal-card">
+  <div class="modal-card themed-modal settings-card">
     <button class="close-btn" data-close="settingsModal">✕</button>
     <h2 class="m-title" data-i18n="settingsTitle">⚙️ Settings</h2>
     <p class="m-sub" data-i18n="settingsSub">Customize audio, language & preferences</p>
 
-    <div class="setting-row">
+    <div class="setting-row stagger-item" style="--d:1">
       <span data-i18n="language">🌐 Language</span>
       <div class="lang-switch">
         <button class="lang-opt" id="langEnBtn">English</button>
@@ -225,37 +257,39 @@
       </div>
     </div>
 
-    <div class="setting-row">
+    <div class="setting-row stagger-item" style="--d:2">
       <span data-i18n="soundVol">🔊 Volume</span>
       <div style="display:flex; align-items:center; gap:8px;">
         <input type="range" min="0" max="100" value="80" class="vol-slider" id="volSlider">
-        <span id="volPct" style="min-width:34px; text-align:right; font-size:12px;">80%</span>
+        <span id="volPct" style="min-width:36px; text-align:right; font-size:12px; font-weight:800;">80%</span>
       </div>
     </div>
 
-    <div class="setting-row">
+    <div class="setting-row stagger-item" style="--d:3">
       <span data-i18n="vibration">📳 Vibration</span>
-      <button class="toggle-pill on" id="vibToggleBtn">ON</button>
+      <button class="toggle-switch on" id="vibToggleBtn" aria-label="Vibration">
+        <span class="toggle-knob"></span>
+      </button>
     </div>
 
-    <button class="btn-main" id="openThemesFromSet" style="margin-top:6px;" data-i18n="browseThemes">🎨 50 Themes Gallery</button>
-    <button class="btn-ghost" id="openHowToBtn" data-i18n="howToPlay">❓ How to Play</button>
+    <button class="btn-main stagger-item" style="--d:4; margin-top:8px;" id="openThemesFromSet" data-i18n="browseThemes">🎨 50 Themes Gallery</button>
+    <button class="btn-ghost stagger-item" style="--d:5" id="openHowToBtn" data-i18n="howToPlay">❓ How to Play</button>
 
-    <div class="section-lbl" data-i18n="legalInfo">App & Legal</div>
-    <button class="btn-ghost" id="openPrivacyBtn" data-i18n="privacyPolicy">🛡️ Privacy Policy & Terms</button>
-    <button class="btn-ghost" id="resetDataBtn" style="color:#dc2626; border-color:#fecaca;" data-i18n="resetProgress">🗑️ Reset Game Progress</button>
-    <div class="app-ver">Arrow Escape • Version 1.0.0</div>
+    <div class="section-lbl stagger-item" style="--d:6" data-i18n="legalInfo">App & Legal</div>
+    <button class="btn-ghost stagger-item" style="--d:7" id="openPrivacyBtn" data-i18n="privacyPolicy">🛡️ Privacy Policy & Terms</button>
+    <button class="btn-ghost danger-ghost stagger-item" style="--d:8" id="resetDataBtn" data-i18n="resetProgress">🗑️ Reset Game Progress</button>
+    <div class="app-ver">Arrow Escape • Version 2.0.0</div>
   </div>
 </div>
 
-<!-- 50 THEMES MODAL -->
+<!-- ===================== 50 THEMES GALLERY MODAL ===================== -->
 <div class="modal-bg" id="themesModal">
-  <div class="modal-card">
+  <div class="modal-card themed-modal">
     <button class="close-btn" data-close="themesModal">✕</button>
     <h2 class="m-title" data-i18n="themesTitle">🎨 50 Stylish Themes</h2>
     <p class="m-sub" data-i18n="themesSub">Auto-unlocks every 10 levels, or unlock early with coins!</p>
-    <div style="display:flex; justify-content:center; margin-bottom:8px;">
-      <div class="hud-pill" style="background:#fef3c7; border-color:#fde047;">
+    <div style="display:flex; justify-content:center; margin-bottom:10px;">
+      <div class="coin-pill-modal">
         <svg class="coin-svg" style="width:18px;height:18px"><use href="#icon-coin"/></svg>
         <span id="themesCoinsVal">120</span>
       </div>
@@ -264,14 +298,14 @@
   </div>
 </div>
 
-<!-- BOOSTER SHOP MODAL -->
+<!-- ===================== BOOSTER SHOP MODAL ===================== -->
 <div class="modal-bg" id="shopModal">
-  <div class="modal-card">
+  <div class="modal-card themed-modal">
     <button class="close-btn" data-close="shopModal">✕</button>
     <h2 class="m-title" data-i18n="shopTitle">⚡ Power-Up Shop</h2>
     <p class="m-sub" data-i18n="shopSub">Spend gold coins on super boosters!</p>
     <div style="display:flex; justify-content:center; margin-bottom:12px;">
-      <div class="hud-pill" style="background:#fef3c7; border-color:#fde047;">
+      <div class="coin-pill-modal">
         <svg class="coin-svg" style="width:18px;height:18px"><use href="#icon-coin"/></svg>
         <span id="shopCoinsVal">120</span>
       </div>
@@ -280,9 +314,9 @@
   </div>
 </div>
 
-<!-- PRIVACY POLICY & HOW TO PLAY MODAL -->
+<!-- ===================== PRIVACY POLICY & HOW TO PLAY MODAL ===================== -->
 <div class="modal-bg" id="infoModal">
-  <div class="modal-card">
+  <div class="modal-card themed-modal">
     <button class="close-btn" data-close="infoModal">✕</button>
     <h2 class="m-title" id="infoModalTitle">Privacy Policy</h2>
     <div class="policy-text" id="infoModalBody"></div>
