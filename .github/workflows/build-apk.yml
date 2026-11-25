@@ -1,0 +1,103 @@
+name: Build Arrow Escape APK
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 1. Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: 2. Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: 3. Setup Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: 4. Prepare Web Files & Capacitor Config
+        run: |
+          mkdir -p www
+          cp index.html www/
+          [ -f manifest.json ] && cp manifest.json www/
+          [ -f icon.svg ] && cp icon.svg www/
+          [ -d css ] && cp -r css www/
+          [ -d js ] && cp -r js www/
+
+          cat << 'EOF' > package.json
+          {
+            "name": "arrow-escape",
+            "version": "1.0.0",
+            "private": true,
+            "dependencies": {
+              "@capacitor/core": "^8.0.0",
+              "@capacitor/android": "^8.0.0"
+            },
+            "devDependencies": {
+              "@capacitor/cli": "^8.0.0",
+              "@capacitor/assets": "^4.0.0"
+            }
+          }
+          EOF
+
+          cat << 'EOF' > capacitor.config.json
+          {
+            "appId": "com.arrowescape.game",
+            "appName": "Arrow Escape",
+            "webDir": "www",
+            "android": {
+              "backgroundColor": "#0f172a"
+            }
+          }
+          EOF
+
+      - name: 5. Install Capacitor & Create Android Project
+        run: |
+          npm install
+          npx cap add android
+
+      - name: 6. Generate Android App Icon & Splash from icon.svg
+        run: |
+          if [ -f icon.svg ]; then
+            sudo apt-get update
+            sudo apt-get install -y librsvg2-bin
+            mkdir -p assets
+            rsvg-convert -w 1024 -h 1024 icon.svg -o assets/logo.png
+            npx --no-install capacitor-assets generate --android \
+              --iconBackgroundColor '#0f172a' \
+              --iconBackgroundColorDark '#0f172a' \
+              --splashBackgroundColor '#0f172a' \
+              --splashBackgroundColorDark '#0f172a'
+          fi
+
+      - name: 7. Lock Portrait Mode & Sync Android
+        run: |
+          MANIFEST="android/app/src/main/AndroidManifest.xml"
+          if ! grep -q "screenOrientation" "$MANIFEST"; then
+            sed -i 's/android:name=".MainActivity"/android:name=".MainActivity"\n            android:screenOrientation="portrait"/' "$MANIFEST"
+          fi
+          npx cap sync android
+
+      - name: 8. Build Android APK
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug
+          cd ..
+          cp android/app/build/outputs/apk/debug/app-debug.apk ArrowEscape-v1.0.${{ github.run_number }}.apk
+
+      - name: 9. Upload APK as Downloadable ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: ArrowEscape-APK
+          path: ArrowEscape-v1.0.${{ github.run_number }}.apk
+          retention-days: 30
