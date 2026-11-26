@@ -5,28 +5,22 @@ window.AE = window.AE || {};
 
   const HomeBG = {
     canvas: document.getElementById('homeBgCanvas'),
-    ctx: null,
-    items: [],
+    ctx: null, items: [],
     init() {
       this.ctx = this.canvas.getContext('2d');
       this.resize();
       window.addEventListener('resize', () => this.resize());
-      for (let i = 0; i < 18; i++) {
+      for (let i = 0; i < 20; i++) {
         this.items.push({
-          x: Math.random() * window.innerWidth,
-          y: Math.random() * window.innerHeight,
-          len: 36 + Math.random() * 54,
-          sp: 18 + Math.random() * 34,
+          x: Math.random() * window.innerWidth, y: Math.random() * window.innerHeight,
+          len: 36 + Math.random() * 56, sp: 20 + Math.random() * 36,
           ang: Math.floor(Math.random() * 4) * (Math.PI / 2),
           col: i % 3 === 0 ? '#38bdf8' : (i % 3 === 1 ? '#fde047' : '#a855f7'),
           alpha: 0.14 + Math.random() * 0.24
         });
       }
     },
-    resize() {
-      this.canvas.width = window.innerWidth;
-      this.canvas.height = window.innerHeight;
-    },
+    resize() { this.canvas.width = window.innerWidth; this.canvas.height = window.innerHeight; },
     tick(dt) {
       if (!document.getElementById('screenHome').classList.contains('active')) return;
       const c = this.ctx, w = this.canvas.width, h = this.canvas.height;
@@ -36,7 +30,6 @@ window.AE = window.AE || {};
         it.y += Math.sin(it.ang) * it.sp * dt;
         if (it.x < -80) it.x = w + 70; if (it.x > w + 80) it.x = -70;
         if (it.y < -80) it.y = h + 70; if (it.y > h + 80) it.y = -70;
-
         c.save(); c.translate(it.x, it.y); c.rotate(it.ang); c.globalAlpha = it.alpha;
         c.strokeStyle = it.col; c.fillStyle = it.col; c.lineWidth = 4; c.lineCap = 'round';
         c.beginPath(); c.moveTo(-it.len / 2, 0); c.lineTo(it.len / 2 - 8, 0); c.stroke();
@@ -61,17 +54,24 @@ window.AE = window.AE || {};
     lastClearTime: 0, startTime: 0, elapsedSec: 0,
     ended: false, hammerMode: false,
 
-    cam: { x: 4, y: 4, scale: 34, minScale: 13, maxScale: 120 },
+    cam: { x: 4, y: 4, scale: 34, baseScale: 34, minScale: 10, maxScale: 140 },
     viewW: window.innerWidth, viewH: window.innerHeight,
     pointers: new Map(), dragStart: null, isDragging: false,
     lastPinchDist: 0, lastPinchMid: null,
 
-    shakeTime: 0, shakeMag: 0, particles: [], popups: [], clock: 0, toastTimer: null,
+    // Version 2.0 Cinematic Systems
+    intro: { active: false, t: 0, dur: 0.85, flyers: [] },
+    bullet: { active: false, arrow: null, t: 0, rings: [], ringCd: 0 },
+    celebrate: { active: false, flyers: [] },
+
+    shakeTime: 0, shakeMag: 0, particles: [], popups: [], impactRings: [],
+    clock: 0, toastTimer: null, bannerTimer: null,
 
     async init() {
       this.profile = await AE.Vault.load();
       AE.AudioFX.volume = this.profile.volume;
       AE.AudioFX.vibration = this.profile.vibration;
+      AE.resetHomeThemeUI();
       HomeBG.init();
       this.bindUI();
       this.applyLanguage();
@@ -94,11 +94,30 @@ window.AE = window.AE || {};
       toEl.classList.add('active');
       this.currentScreen = targetId;
 
-      if (targetId === 'screenHome') this.refreshHomeUI();
-      if (targetId === 'screenLevels') this.renderLevelBlocks();
+      if (targetId === 'screenHome') {
+        this.clearCinemaUI();
+        AE.resetHomeThemeUI();
+        this.refreshHomeUI();
+      }
+      if (targetId === 'screenLevels') {
+        this.clearCinemaUI();
+        AE.resetHomeThemeUI();
+        this.renderLevelBlocks();
+      }
       if (targetId === 'screenGame') {
+        if (this.theme) AE.applyThemeUI(this.theme);
         requestAnimationFrame(() => { this.resizeCanvas(); if (this.lvl) this.fitCamera(); });
       }
+    },
+
+    clearCinemaUI() {
+      this.bullet.active = false;
+      this.celebrate.active = false;
+      document.getElementById('cinemaTop').classList.remove('active');
+      document.getElementById('cinemaBot').classList.remove('active');
+      document.getElementById('gameHud').classList.remove('cinema-hide');
+      document.getElementById('bottomDock').classList.remove('cinema-hide');
+      document.getElementById('victoryBanner').classList.remove('show');
     },
 
     applyLanguage() {
@@ -165,19 +184,32 @@ window.AE = window.AE || {};
       const lvl = Math.max(1, Math.min(this.profile.highestLevel, Math.floor(levelNum)));
       this.profile.currentLevel = lvl;
 
-      if (!this.profile.levelHistory[lvl]) {
+      const existing = this.profile.levelHistory[lvl];
+      if (!existing || (existing.v !== 2 && (!existing.stars || lvl === this.profile.highestLevel))) {
         const seed = ((lvl * 2654435761) ^ Math.floor(Math.random() * 0x7fffffff)) >>> 0;
-        this.profile.levelHistory[lvl] = { seed, skillSnap: this.profile.skillInternal, stars: 0, bestSec: 0 };
+        this.profile.levelHistory[lvl] = {
+          v: 2, seed,
+          skillSnap: this.profile.skillInternal,
+          stars: existing ? (existing.stars || 0) : 0,
+          bestSec: existing ? (existing.bestSec || 0) : 0
+        };
       }
       AE.Vault.save(this.profile);
 
       this.lvl = AE.PuzzleBuilder.build(lvl, this.profile.levelHistory[lvl]);
       this.theme = AE.getActiveTheme(this.profile, lvl);
+      AE.applyThemeUI(this.theme);
 
       this.hearts = 3; this.mistakes = 0; this.hintsUsed = 0; this.combo = 0;
       this.lastClearTime = 0; this.startTime = performance.now(); this.elapsedSec = 0;
       this.ended = false; this.hammerMode = false;
-      this.particles = []; this.popups = [];
+      this.particles = []; this.popups = []; this.impactRings = [];
+      this.clearCinemaUI();
+
+      for (let i = 1; i <= 3; i++) {
+        const h = document.getElementById('h' + i);
+        h.classList.remove('lost', 'breaking', 'pop');
+      }
 
       document.getElementById('resultModal').classList.remove('open');
       canvas.classList.remove('hammer-mode');
@@ -188,8 +220,37 @@ window.AE = window.AE || {};
       this.fitCamera();
       this.updateGameHUD();
 
-      if (lvl === 1) this.showToast(AE.tr('firstTip'), 'info', 2500);
-      else if (this.lvl.W >= 13) this.showToast(AE.tr('zoomTip'), 'info', 2000);
+      this.launchLevelIntro(lvl);
+    },
+
+    launchLevelIntro(lvl) {
+      AE.AudioFX.assembleWhoosh();
+      const flyers = [];
+      const cols = [this.theme.main, this.theme.hi, '#38bdf8', '#fde047', '#a855f7'];
+      for (let i = 0; i < 14; i++) {
+        const side = i % 4;
+        const ang = side * (Math.PI / 2);
+        flyers.push({
+          x: side === 0 ? -60 : (side === 2 ? this.viewW + 60 : Math.random() * this.viewW),
+          y: side === 1 ? -60 : (side === 3 ? this.viewH + 60 : Math.random() * this.viewH),
+          vx: Math.cos(ang) * (760 + Math.random() * 520),
+          vy: Math.sin(ang) * (760 + Math.random() * 520),
+          ang, len: 48 + Math.random() * 54, col: cols[i % cols.length]
+        });
+      }
+      this.intro = { active: true, t: 0, dur: 0.85, flyers };
+      this.flashBanner(this.lvl.isBoss ? `👑 BOSS ${lvl}` : AE.tr('levelIntro', lvl), 820);
+
+      if (lvl === 1) setTimeout(() => this.showToast(AE.tr('firstTip'), 'info', 2500), 900);
+      else if (this.lvl.W >= 14) setTimeout(() => this.showToast(AE.tr('zoomTip'), 'info', 2000), 900);
+    },
+
+    flashBanner(text, ms = 900) {
+      const b = document.getElementById('victoryBanner');
+      b.textContent = text;
+      b.classList.add('show');
+      clearTimeout(this.bannerTimer);
+      this.bannerTimer = setTimeout(() => b.classList.remove('show'), ms);
     },
 
     resizeCanvas() {
@@ -203,15 +264,16 @@ window.AE = window.AE || {};
     fitCamera() {
       if (!this.lvl) return;
       const { W, H } = this.lvl;
-      const topPad = 108, botPad = 112, sidePad = 20;
+      const topPad = 112, botPad = 116, sidePad = 16;
       const availW = Math.max(120, this.viewW - sidePad * 2);
       const availH = Math.max(120, this.viewH - topPad - botPad);
-      const scale = Math.min(availW / (W + 0.8), availH / (H + 0.8));
-      this.cam.scale = Math.max(15, Math.min(62, scale));
-      this.cam.minScale = Math.max(10, this.cam.scale * 0.55);
-      this.cam.maxScale = Math.min(140, this.cam.scale * 3.8);
+      const scale = Math.min(availW / (W + 0.6), availH / (H + 0.6));
+      this.cam.scale = Math.max(11, Math.min(60, scale));
+      this.cam.baseScale = this.cam.scale;
+      this.cam.minScale = Math.max(8, this.cam.scale * 0.55);
+      this.cam.maxScale = Math.min(150, this.cam.scale * 4.5);
       this.cam.x = W / 2;
-      this.cam.y = H / 2 - (botPad - topPad) / (2 * this.cam.scale) * 0.25;
+      this.cam.y = H / 2 - (botPad - topPad) / (2 * this.cam.scale) * 0.22;
     },
 
     screenToWorld(sx, sy) {
@@ -221,7 +283,7 @@ window.AE = window.AE || {};
       };
     },
 
-    showToast(msg, type = '', dur = 2200) {
+    showToast(msg, type = '', dur = 2400) {
       const el = document.getElementById('toastBanner');
       el.textContent = msg;
       el.className = 'show' + (type ? ' ' + type : '');
@@ -241,7 +303,11 @@ window.AE = window.AE || {};
       document.getElementById('shapeChip').textContent = `${this.lvl.shapeName}`;
       document.getElementById('gameCoinsVal').textContent = p.coins;
 
-      for (let i = 1; i <= 3; i++) document.getElementById('h' + i).classList.toggle('lost', i > this.hearts);
+      for (let i = 1; i <= 3; i++) {
+        const h = document.getElementById('h' + i);
+        if (i <= this.hearts) h.classList.remove('lost', 'breaking');
+        else if (!h.classList.contains('breaking')) h.classList.add('lost');
+      }
 
       const setB = (id, cnt, cost) => {
         const b = document.getElementById(id);
@@ -272,21 +338,31 @@ window.AE = window.AE || {};
       const head = arrow.cells[arrow.cells.length - 1];
       const { x: dx, y: dy } = arrow.dir;
 
+      const pierceLimit = AE.Powers.getPierceLimit(arrow.type);
+      const phaseLimit = AE.Powers.getPhaseLimit(arrow.type);
+
       let cx = head.x + dx, cy = head.y + dy, step = 1;
       const sliced = [], seen = new Set();
-      let ghostSkipped = 0;
+      let phased = 0;
 
       while (cx >= 0 && cx < W && cy >= 0 && cy < H) {
         const k = cy * W + cx;
         if (bhMap.has(k)) return { canExit: true, mode: 'blackhole', bh: bhMap.get(k), dist: step, sliced };
         const other = occ[cy][cx];
         if (other && other.id !== arrow.id) {
-          if (arrow.type === 'killer') {
-            if (!seen.has(other.id)) { seen.add(other.id); sliced.push(other); }
-          } else if (arrow.type === 'ghost') {
+          if (pierceLimit > 0) {
             if (!seen.has(other.id)) {
-              seen.add(other.id); ghostSkipped++;
-              if (ghostSkipped > 1) return { canExit: false, hitDist: Math.max(0.15, step - 0.65), hitPos: { x: cx + 0.5, y: cy + 0.5 } };
+              if (sliced.length >= pierceLimit) {
+                return { canExit: false, hitDist: Math.max(0.15, step - 0.65), hitPos: { x: cx + 0.5, y: cy + 0.5 } };
+              }
+              seen.add(other.id); sliced.push(other);
+            }
+          } else if (phaseLimit > 0) {
+            if (!seen.has(other.id)) {
+              seen.add(other.id); phased++;
+              if (phased > phaseLimit) {
+                return { canExit: false, hitDist: Math.max(0.15, step - 0.65), hitPos: { x: cx + 0.5, y: cy + 0.5 } };
+              }
             }
           } else {
             return { canExit: false, hitDist: Math.max(0.15, step - 0.65), hitPos: { x: cx + 0.5, y: cy + 0.5 } };
@@ -298,9 +374,9 @@ window.AE = window.AE || {};
     },
 
     tapWorld(wx, wy) {
-      if (this.ended) return;
+      if (this.ended || this.intro.active || this.bullet.active) return;
       AE.AudioFX.ensure();
-      let best = null, bestD = 0.54;
+      let best = null, bestD = 0.56;
       for (const a of this.lvl.arrows) {
         if (a.state !== 'idle') continue;
         const d = this.distPtArrow(wx, wy, a);
@@ -310,10 +386,10 @@ window.AE = window.AE || {};
 
       if (this.hammerMode) { this.applyHammer(best); return; }
 
-      if (best.type === 'lock' && best.locked) {
+      if (AE.Powers.isLocked(best)) {
         AE.AudioFX.bump(); best.flash = 1; this.spawnPopup(best.pts[0], '🔒', '#f59e0b'); return;
       }
-      if (best.type === 'frozen' && best.iceCount > 0) {
+      if (AE.Powers.isFrozen(best)) {
         AE.AudioFX.bump(); best.flash = 1; this.spawnPopup(best.pts[0], `❄️ ${best.iceCount}`, '#38bdf8'); return;
       }
 
@@ -324,7 +400,8 @@ window.AE = window.AE || {};
 
     releaseArrow(arrow, res, isCascade = false) {
       arrow.state = 'exiting'; arrow.exitMode = res.mode; arrow.bhDist = res.dist;
-      arrow.speed = 19; arrow.hintGlow = 0;
+      arrow.speed = arrow.type !== 'normal' ? 16 : 20;
+      arrow.hintGlow = 0;
 
       const now = performance.now();
       if (!isCascade) {
@@ -333,9 +410,66 @@ window.AE = window.AE || {};
       }
 
       AE.Powers.onRelease(this, arrow, res, isCascade);
-      if (!isCascade) this.advanceBoardCounters(arrow.id);
+      const remainingAfter = this.lvl.arrows.filter(a => a.state === 'idle' || a.state === 'bumping').length;
+
+      if (remainingAfter === 0 && !isCascade && !this.ended) {
+        this.triggerFinalBulletCam(arrow);
+      } else {
+        if (!isCascade) this.advanceBoardCounters(arrow.id);
+        this.updateGameHUD();
+        this.checkWin();
+      }
+    },
+
+    // FILMY 3D SLOW-MOTION BULLET-TIME CAMERA ON THE FINAL ARROW!
+    triggerFinalBulletCam(arrow) {
+      this.ended = true;
+      arrow.isBulletFinal = true;
+      arrow.speed = 6.2;
+      this.bullet = { active: true, arrow, t: 0, rings: [], ringCd: 0 };
+
+      AE.AudioFX.bulletSlowMo();
+      document.getElementById('cinemaTop').classList.add('active');
+      document.getElementById('cinemaBot').classList.add('active');
+      document.getElementById('gameHud').classList.add('cinema-hide');
+      document.getElementById('bottomDock').classList.add('cinema-hide');
       this.updateGameHUD();
-      this.checkWin();
+    },
+
+    finishBulletToVictory() {
+      this.bullet.active = false;
+      document.getElementById('cinemaTop').classList.remove('active');
+      document.getElementById('cinemaBot').classList.remove('active');
+      document.getElementById('gameHud').classList.remove('cinema-hide');
+      document.getElementById('bottomDock').classList.remove('cinema-hide');
+      this.fitCamera();
+      this.launchVictoryCelebration();
+    },
+
+    launchVictoryCelebration() {
+      AE.AudioFX.win();
+      this.flashBanner(this.mistakes === 0 ? AE.tr('awesome') : AE.tr('victory'), 960);
+
+      const flyers = [];
+      const cols = ['#fde047', '#38bdf8', '#22c55e', '#f472b6', '#a855f7', '#fb923c'];
+      for (let i = 0; i < 20; i++) {
+        const ang = (i / 20) * Math.PI * 2;
+        flyers.push({
+          x: this.viewW / 2, y: this.viewH / 2,
+          vx: Math.cos(ang) * (360 + Math.random() * 440),
+          vy: Math.sin(ang) * (360 + Math.random() * 440),
+          ang, len: 42 + Math.random() * 46, col: cols[i % cols.length], life: 1.0
+        });
+      }
+      this.celebrate = { active: true, flyers };
+
+      const cx = this.lvl.W / 2, cy = this.lvl.H / 2;
+      cols.forEach(c => this.spawnParticles(cx, cy, c, 14));
+
+      setTimeout(() => {
+        this.celebrate.active = false;
+        this.endLevel(true);
+      }, 920);
     },
 
     shatterArrow(arrow, col) {
@@ -359,19 +493,19 @@ window.AE = window.AE || {};
     advanceBoardCounters(clearedId) {
       const active = this.lvl.arrows.filter(a => a.state === 'idle' || a.state === 'bumping');
       for (const a of active) {
-        if (a.type === 'frozen' && a.iceCount > 0) {
+        if (AE.Powers.isFrozen(a)) {
           a.iceCount--;
           if (a.iceCount === 0) this.spawnParticles(a.pts[0].x, a.pts[0].y, '#7dd3fc', 12);
         }
       }
-      if (!active.some(a => !(a.type === 'frozen' && a.iceCount > 0))) {
+      if (!active.some(a => !AE.Powers.isFrozen(a))) {
         for (const a of active) if (a.type === 'frozen') a.iceCount = 0;
       }
       const activeIds = new Set(active.map(a => a.id));
-      for (const a of active) if (a.type === 'lock' && a.locked && !activeIds.has(a.keyId)) a.locked = false;
+      for (const a of active) if (AE.Powers.isLocked(a) && !activeIds.has(a.keyId)) a.locked = false;
 
       for (const a of active) {
-        if (a.type === 'bomb' && a.id !== clearedId) {
+        if (AE.Powers.isBomb(a) && a.id !== clearedId) {
           a.bombMoves--;
           if (a.bombMoves <= 0) { this.triggerExplosion(a); return; }
         }
@@ -389,45 +523,89 @@ window.AE = window.AE || {};
       setTimeout(() => this.endLevel(false, AE.tr('failBomb')), 720);
     },
 
+    // DRAMATIC HEART SHATTER FX (No pulsing/dhak-dhak!)
+    triggerHeartBreakFX(heartNum) {
+      const el = document.getElementById('h' + heartNum);
+      const pill = document.getElementById('heartsPill');
+      const flash = document.getElementById('damageFlash');
+      const fx = document.getElementById('fxLayer');
+
+      flash.classList.add('hit');
+      setTimeout(() => flash.classList.remove('hit'), 220);
+
+      pill.classList.remove('shake-box');
+      void pill.offsetWidth;
+      pill.classList.add('shake-box');
+
+      if (el) {
+        el.classList.remove('lost', 'pop');
+        el.classList.add('breaking');
+        const rect = el.getBoundingClientRect();
+        const cx = rect.left + rect.width / 2;
+        const cy = rect.top + rect.height / 2;
+        const glyphs = ['💔', '❤️', '🔺', '✨', '💔', '🔺'];
+        for (let i = 0; i < 6; i++) {
+          const sp = document.createElement('span');
+          sp.className = 'heart-shard';
+          sp.textContent = glyphs[i];
+          sp.style.left = cx + 'px';
+          sp.style.top = cy + 'px';
+          sp.style.setProperty('--tx', `${Math.round((Math.random() - 0.5) * 120)}px`);
+          sp.style.setProperty('--ty', `${Math.round(75 + Math.random() * 100)}px`);
+          sp.style.setProperty('--rot', `${Math.round((Math.random() - 0.5) * 420)}deg`);
+          fx.appendChild(sp);
+          setTimeout(() => sp.remove(), 820);
+        }
+      }
+    },
+
     bumpArrow(arrow, res) {
-      AE.AudioFX.bump();
+      AE.AudioFX.heartBreak();
       arrow.state = 'bumping'; arrow.slide = 0; arrow.bumpDir = 1;
       arrow.bumpMax = Math.min(0.45, Math.max(0.18, res.hitDist));
-      arrow.flash = 1; this.combo = 0; this.mistakes++; this.hearts--;
-      this.shake(0.22, 6);
-      if (res.hitPos) this.spawnParticles(res.hitPos.x, res.hitPos.y, '#ef4444', 10);
+      arrow.flash = 1; this.combo = 0; this.mistakes++;
+
+      const lostNum = this.hearts;
+      this.hearts--;
+      this.triggerHeartBreakFX(lostNum);
+      this.shake(0.28, 8);
+
+      if (res.hitPos) {
+        this.spawnParticles(res.hitPos.x, res.hitPos.y, '#ef4444', 14);
+        this.impactRings.push({ x: res.hitPos.x, y: res.hitPos.y, r: 0.1, maxR: 1.15, life: 0.38, max: 0.38, col: '#ef4444' });
+        this.spawnPopup(res.hitPos, '-1 💔', '#ef4444');
+      }
       this.updateGameHUD();
+
       if (this.hearts <= 0) {
         this.ended = true;
-        setTimeout(() => this.endLevel(false, AE.tr('failHearts')), 460);
+        setTimeout(() => this.endLevel(false, AE.tr('failHearts')), 560);
       }
     },
 
     checkWin() {
       if (this.ended) return;
       if (!this.lvl.arrows.some(a => a.state === 'idle' || a.state === 'bumping')) {
-        this.ended = true; AE.AudioFX.win();
-        const cx = this.lvl.W / 2, cy = this.lvl.H / 2;
-        ['#22c55e', '#3b82f6', '#f59e0b', '#ec4899', '#a855f7'].forEach(c => this.spawnParticles(cx, cy, c, 14));
-        setTimeout(() => this.endLevel(true), 580);
+        this.ended = true;
+        this.launchVictoryCelebration();
       }
     },
 
     endLevel(won, failMsg = '') {
       const p = this.profile;
       const sec = Math.max(1, (performance.now() - this.startTime) / 1000);
-      let reward = 0, unlockedThemeName = '';
+      let reward = 0, unlockedThemeName = '', earnedStars = 0;
 
       if (won) {
-        const stars = this.mistakes === 0 ? 3 : (this.mistakes === 1 ? 2 : 1);
+        earnedStars = this.mistakes === 0 ? 3 : (this.mistakes === 1 ? 2 : 1);
         const hist = p.levelHistory[this.lvl.level];
         const isFirstWin = !hist || hist.stars === 0;
         if (hist) {
-          hist.stars = Math.max(hist.stars || 0, stars);
+          hist.stars = Math.max(hist.stars || 0, earnedStars);
           hist.bestSec = hist.bestSec ? Math.min(hist.bestSec, Math.round(sec)) : Math.round(sec);
         }
 
-        reward = isFirstWin ? ((this.lvl.isBoss ? 60 : 25) + stars * 5) : 10;
+        reward = isFirstWin ? ((this.lvl.isBoss ? 65 : 25) + earnedStars * 5) : 10;
         p.coins += reward;
 
         const spa = sec / Math.max(1, this.lvl.initialCount);
@@ -439,7 +617,7 @@ window.AE = window.AE || {};
         p.levelsCompletedCount++;
 
         const targetIq = Math.round(96 + (p.skillInternal * 0.56) + Math.min(16, Math.log2(p.highestLevel + 1) * 2.2));
-        p.iqScore = Math.max(92, Math.min(168, Math.round(p.iqScore * 0.6 + targetIq * 0.4)));
+        p.iqScore = Math.max(92, Math.min(175, Math.round(p.iqScore * 0.6 + targetIq * 0.4)));
 
         const prevHighest = p.highestLevel;
         if (this.lvl.level >= p.highestLevel) {
@@ -457,14 +635,39 @@ window.AE = window.AE || {};
       AE.Vault.save(p);
       this.updateGameHUD();
 
+      document.getElementById('resTopBadge').textContent = won ? (this.lvl.isBoss ? '👑' : '🏆') : '💥';
       document.getElementById('resTitle').textContent = won
         ? (this.lvl.isBoss ? AE.tr('bossWin', this.lvl.level) : AE.tr('lvlWin', this.lvl.level))
         : AE.tr('gameOver');
       document.getElementById('resSub').textContent = won ? this.lvl.shapeName : failMsg;
-      document.getElementById('resStars').textContent = won ? (this.mistakes === 0 ? '⭐⭐⭐' : (this.mistakes === 1 ? '⭐⭐☆' : '⭐☆☆')) : '☆☆☆';
       document.getElementById('resTime').textContent = this.fmtTime(sec);
-      document.getElementById('resCoins').textContent = won ? `+${reward}` : '0';
       document.getElementById('resIq').textContent = `IQ ${p.iqScore}`;
+
+      for (let i = 1; i <= 3; i++) {
+        const stEl = document.getElementById('star' + i);
+        stEl.classList.remove('earned');
+        if (won && i <= earnedStars) {
+          setTimeout(() => {
+            stEl.classList.add('earned');
+            AE.AudioFX.starPop(i - 1);
+          }, 180 + i * 240);
+        }
+      }
+
+      const coinEl = document.getElementById('resCoins');
+      if (won && reward > 0) {
+        let shown = 0;
+        const step = Math.max(1, Math.ceil(reward / 18));
+        coinEl.textContent = '+0';
+        const iv = setInterval(() => {
+          shown = Math.min(reward, shown + step);
+          coinEl.textContent = '+' + shown;
+          if (shown % 4 === 0) AE.AudioFX.coinTick();
+          if (shown >= reward) clearInterval(iv);
+        }, 32);
+      } else {
+        coinEl.textContent = '0';
+      }
 
       const tNotice = document.getElementById('themeUnlockNotice');
       if (unlockedThemeName) { tNotice.style.display = 'block'; tNotice.textContent = AE.tr('themeUnlocked', unlockedThemeName); }
@@ -472,9 +675,17 @@ window.AE = window.AE || {};
 
       const btn1 = document.getElementById('resPrimaryBtn');
       const btn2 = document.getElementById('resSecondaryBtn');
+      const btnHome = document.getElementById('resHomeBtn');
+
+      btnHome.textContent = AE.tr('home');
+      btnHome.onclick = () => {
+        document.getElementById('resultModal').classList.remove('open');
+        this.goScreen('screenHome');
+      };
+
       if (won) {
         btn1.textContent = AE.tr('nextLvl', this.lvl.level + 1);
-        btn1.className = 'btn-main';
+        btn1.className = 'btn-main shimmer-btn';
         btn1.onclick = () => this.startLevel(this.lvl.level + 1);
         btn2.style.display = 'block';
         btn2.textContent = AE.tr('replay');
@@ -485,11 +696,12 @@ window.AE = window.AE || {};
         btn1.onclick = () => this.startLevel(this.lvl.level);
         btn2.style.display = 'none';
       }
+
       document.getElementById('resultModal').classList.add('open');
     },
 
     useHint() {
-      if (this.ended) return;
+      if (this.ended || this.intro.active || this.bullet.active) return;
       const p = this.profile;
       if (p.hints <= 0) {
         if (p.coins < 25) return this.showToast(AE.tr('needCoins', 25), 'danger');
@@ -497,30 +709,30 @@ window.AE = window.AE || {};
       } else p.hints--;
 
       const playable = this.lvl.arrows.filter(a =>
-        a.state === 'idle' && !(a.type === 'lock' && a.locked) &&
-        !(a.type === 'frozen' && a.iceCount > 0) && this.checkEscape(a).canExit
+        a.state === 'idle' && !AE.Powers.isLocked(a) && !AE.Powers.isFrozen(a) && this.checkEscape(a).canExit
       );
       if (!playable.length) return this.showToast(AE.tr('hammerPrompt'), 'gold');
 
       playable.sort((a, b) => {
-        const sc = x => x.type === 'bomb' ? 100 - x.bombMoves : (x.type === 'key' ? 85 : (x.type !== 'normal' ? 70 : 10));
+        const sc = x => AE.Powers.isBomb(x) ? 100 - x.bombMoves : (x.type === 'key' ? 85 : (x.type !== 'normal' ? 70 : 10));
         return sc(b) - sc(a);
       });
 
       const pick = playable[0];
-      pick.hintGlow = 5; this.hintsUsed++; AE.AudioFX.coin();
+      pick.hintGlow = 5.5; this.hintsUsed++; AE.AudioFX.coin();
 
       const mp = pick.pts[Math.floor(pick.pts.length / 2)];
-      this.cam.x = this.cam.x * 0.35 + mp.x * 0.65;
-      this.cam.y = this.cam.y * 0.35 + mp.y * 0.65;
+      this.cam.x = this.cam.x * 0.3 + mp.x * 0.7;
+      this.cam.y = this.cam.y * 0.3 + mp.y * 0.7;
+      this.cam.scale = Math.max(this.cam.scale, this.cam.baseScale * 1.45);
 
       const esc = this.checkEscape(pick);
-      this.showToast(AE.Powers.getHintText(pick, esc), 'gold', 3800);
+      this.showToast(AE.Powers.getHintText(pick, esc), 'gold', 4200);
       AE.Vault.save(p); this.updateGameHUD();
     },
 
     toggleHammer() {
-      if (this.ended) return;
+      if (this.ended || this.intro.active || this.bullet.active) return;
       if (this.hammerMode) {
         this.hammerMode = false; canvas.classList.remove('hammer-mode');
         document.getElementById('btnHammer').classList.remove('hammer-active'); return;
@@ -537,14 +749,14 @@ window.AE = window.AE || {};
       document.getElementById('btnHammer').classList.remove('hammer-active');
       AE.AudioFX.hammer(); this.shake(0.28, 9);
       this.shatterArrow(arrow, '#f97316'); this.spawnPopup(arrow.pts[0], '🔨', '#f97316');
-      for (const a of this.lvl.arrows) if (a.state === 'idle' && a.type === 'frozen' && a.iceCount > 0) a.iceCount--;
+      for (const a of this.lvl.arrows) if (a.state === 'idle' && AE.Powers.isFrozen(a)) a.iceCount--;
       AE.Vault.save(this.profile); this.updateGameHUD(); this.checkWin();
     },
 
     useFreeze() {
-      if (this.ended) return;
-      const bombs = this.lvl.arrows.filter(a => a.state === 'idle' && a.type === 'bomb');
-      const ice = this.lvl.arrows.filter(a => a.state === 'idle' && a.type === 'frozen' && a.iceCount > 0);
+      if (this.ended || this.intro.active || this.bullet.active) return;
+      const bombs = this.lvl.arrows.filter(a => a.state === 'idle' && AE.Powers.isBomb(a));
+      const ice = this.lvl.arrows.filter(a => a.state === 'idle' && AE.Powers.isFrozen(a));
       if (!bombs.length && !ice.length) return this.showToast('⏳', 'info', 1200);
       if (this.profile.freezes <= 0) {
         if (this.profile.coins < 35) return this.showToast(AE.tr('needCoins', 35), 'danger');
@@ -557,7 +769,7 @@ window.AE = window.AE || {};
     },
 
     useNovaBlast() {
-      if (this.ended) return;
+      if (this.ended || this.intro.active || this.bullet.active) return;
       const cands = this.lvl.arrows.filter(a => a.state === 'idle');
       if (!cands.length) return;
       if (this.profile.novas <= 0) {
@@ -565,7 +777,7 @@ window.AE = window.AE || {};
         this.profile.coins -= 60;
       } else this.profile.novas--;
       AE.AudioFX.laser(); this.shake(0.32, 10);
-      cands.sort((a, b) => (b.type === 'bomb' ? 1 : 0) - (a.type === 'bomb' ? 1 : 0));
+      cands.sort((a, b) => (AE.Powers.isBomb(b) ? 1 : 0) - (AE.Powers.isBomb(a) ? 1 : 0));
       cands.slice(0, 3).forEach(a => this.shatterArrow(a, '#fde047'));
       AE.Vault.save(this.profile); this.updateGameHUD(); this.checkWin();
     },
@@ -611,8 +823,8 @@ window.AE = window.AE || {};
     shake(d, m) { this.shakeTime = Math.max(this.shakeTime, d); this.shakeMag = Math.max(this.shakeMag, m); },
     spawnParticles(x, y, col, n = 10) {
       for (let i = 0; i < n; i++) {
-        const ang = Math.random() * Math.PI * 2, sp = 1.4 + Math.random() * 5;
-        this.particles.push({ x, y, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp, life: 0.4 + Math.random() * 0.35, max: 0.75, r: 0.06 + Math.random() * 0.09, col });
+        const ang = Math.random() * Math.PI * 2, sp = 1.4 + Math.random() * 5.2;
+        this.particles.push({ x, y, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp, life: 0.4 + Math.random() * 0.35, max: 0.75, r: 0.06 + Math.random() * 0.1, col });
       }
     },
     spawnPopup(pt, txt, col) { this.popups.push({ x: pt.x, y: pt.y - 0.25, txt, col, life: 1.05, max: 1.05 }); },
@@ -630,21 +842,81 @@ window.AE = window.AE || {};
     },
 
     updateGame(dt, now) {
-      if (!this.ended) {
+      if (this.intro.active) {
+        this.intro.t += dt;
+        for (const f of this.intro.flyers) { f.x += f.vx * dt; f.y += f.vy * dt; }
+        if (this.intro.t >= this.intro.dur) {
+          this.intro.active = false;
+          this.startTime = now;
+        }
+      }
+
+      if (this.celebrate.active) {
+        for (const f of this.celebrate.flyers) {
+          f.x += f.vx * dt; f.y += f.vy * dt; f.life = Math.max(0, f.life - dt * 1.15);
+        }
+      }
+
+      if (!this.ended && !this.intro.active) {
         const s = Math.floor((now - this.startTime) / 1000);
         if (s !== this.elapsedSec) {
           this.elapsedSec = s;
           document.getElementById('timerChip').textContent = '⏱️ ' + this.fmtTime(s);
         }
       }
+
       if (this.shakeTime > 0) this.shakeTime = Math.max(0, this.shakeTime - dt);
 
-      const maxExit = Math.max(this.lvl.W, this.lvl.H) + 8;
+      let timeScale = 1;
+      if (this.bullet.active && this.bullet.arrow) {
+        this.bullet.t += dt;
+        timeScale = this.bullet.t < 1.05 ? 0.24 : 1.55;
+
+        const a = this.bullet.arrow;
+        const L = a.pts.length - 1;
+        const tip = this.samplePath(a, a.slide + L);
+        const prev = this.samplePath(a, Math.max(0, a.slide + L - 0.15));
+        const ang = Math.atan2(tip.y - prev.y, tip.x - prev.x);
+
+        const targetZoom = Math.min(this.cam.maxScale, this.cam.baseScale * 1.88);
+        this.cam.scale += (targetZoom - this.cam.scale) * Math.min(1, dt * 4.5);
+        this.cam.x += (tip.x - this.cam.x) * Math.min(1, dt * 6.5);
+        this.cam.y += (tip.y - this.cam.y) * Math.min(1, dt * 6.5);
+
+        this.bullet.ringCd -= dt;
+        if (this.bullet.ringCd <= 0) {
+          this.bullet.ringCd = 0.085;
+          this.bullet.rings.push({ x: tip.x, y: tip.y, ang, r: 0.14, life: 0.52, max: 0.52 });
+          this.spawnParticles(tip.x, tip.y, '#fde047', 3);
+        }
+
+        for (let i = this.bullet.rings.length - 1; i >= 0; i--) {
+          const r = this.bullet.rings[i];
+          r.r += 1.65 * dt; r.life -= dt;
+          if (r.life <= 0) this.bullet.rings.splice(i, 1);
+        }
+
+        if (a.state === 'dead' || this.bullet.t > 1.75) {
+          this.finishBulletToVictory();
+        }
+      }
+
+      const maxExit = Math.max(this.lvl.W, this.lvl.H) + 7;
       for (const a of this.lvl.arrows) {
         if (a.flash > 0) a.flash = Math.max(0, a.flash - dt * 2.8);
         if (a.hintGlow > 0) a.hintGlow = Math.max(0, a.hintGlow - dt);
+
         if (a.state === 'exiting') {
-          a.speed += 38 * dt; a.slide += a.speed * dt;
+          const effDt = a.isBulletFinal ? dt * timeScale : dt;
+          a.speed += (a.isBulletFinal ? 16 : 40) * effDt;
+          a.slide += a.speed * effDt;
+
+          if (a.type !== 'normal' && Math.random() < 0.45) {
+            const p0 = this.samplePath(a, a.slide);
+            const st = AE.Powers.getStyle(a, this.theme);
+            this.particles.push({ x: p0.x, y: p0.y, vx: (Math.random() - 0.5) * 1.4, vy: (Math.random() - 0.5) * 1.4, life: 0.28, max: 0.28, r: 0.08, col: st.hi });
+          }
+
           const L = a.pts.length - 1;
           if (a.exitMode === 'blackhole' ? a.slide >= L + a.bhDist : a.slide > L + maxExit) a.state = 'dead';
         } else if (a.state === 'bumping') {
@@ -652,9 +924,15 @@ window.AE = window.AE || {};
           else { a.slide -= 6.8 * dt; if (a.slide <= 0) { a.slide = 0; a.state = 'idle'; } }
         }
       }
+
       for (let i = this.particles.length - 1; i >= 0; i--) {
         const p = this.particles[i]; p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= 0.94; p.vy *= 0.94; p.life -= dt;
         if (p.life <= 0) this.particles.splice(i, 1);
+      }
+      for (let i = this.impactRings.length - 1; i >= 0; i--) {
+        const r = this.impactRings[i]; r.life -= dt;
+        r.r = r.maxR * (1 - r.life / r.max);
+        if (r.life <= 0) this.impactRings.splice(i, 1);
       }
       for (let i = this.popups.length - 1; i >= 0; i--) {
         const p = this.popups[i]; p.y -= 0.8 * dt; p.life -= dt;
@@ -670,11 +948,29 @@ window.AE = window.AE || {};
       bgGrad.addColorStop(0, th.bg); bgGrad.addColorStop(1, th.bg2);
       ctx.fillStyle = bgGrad; ctx.fillRect(0, 0, this.viewW, this.viewH);
 
+      if (this.bullet.active) {
+        const vg = ctx.createRadialGradient(this.viewW / 2, this.viewH / 2, this.viewW * 0.18, this.viewW / 2, this.viewH / 2, this.viewW * 0.85);
+        vg.addColorStop(0, 'rgba(0,0,0,0)');
+        vg.addColorStop(1, 'rgba(2, 6, 23, 0.72)');
+        ctx.fillStyle = vg; ctx.fillRect(0, 0, this.viewW, this.viewH);
+
+        ctx.save(); ctx.translate(this.viewW / 2, this.viewH / 2);
+        ctx.strokeStyle = 'rgba(254, 240, 138, 0.16)'; ctx.lineWidth = 2;
+        for (let i = 0; i < 16; i++) {
+          const a = (i / 16) * Math.PI * 2 + this.clock * 0.6;
+          const r1 = 130 + ((i * 37 + this.clock * 400) % 90);
+          ctx.beginPath(); ctx.moveTo(Math.cos(a) * r1, Math.sin(a) * r1);
+          ctx.lineTo(Math.cos(a) * (r1 + 140), Math.sin(a) * (r1 + 140)); ctx.stroke();
+        }
+        ctx.restore();
+      }
+
       ctx.save();
       if (this.shakeTime > 0) {
         ctx.translate((Math.random() - 0.5) * 2 * this.shakeMag * this.shakeTime * 2,
                       (Math.random() - 0.5) * 2 * this.shakeMag * this.shakeTime * 2);
       }
+
       ctx.translate(this.viewW / 2, this.viewH / 2);
       ctx.scale(this.cam.scale, this.cam.scale);
       ctx.translate(-this.cam.x, -this.cam.y);
@@ -683,7 +979,7 @@ window.AE = window.AE || {};
         ctx.fillStyle = th.dot;
         for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
           if (!mask[y][x]) continue;
-          ctx.beginPath(); ctx.arc(x + 0.5, y + 0.5, 0.06, 0, Math.PI * 2); ctx.fill();
+          ctx.beginPath(); ctx.arc(x + 0.5, y + 0.5, 0.055, 0, Math.PI * 2); ctx.fill();
         }
       }
 
@@ -698,8 +994,28 @@ window.AE = window.AE || {};
       }
 
       for (const bh of blackHoles) this.drawBlackHole(bh.x + 0.5, bh.y + 0.5);
+
+      if (this.bullet.active) {
+        for (const r of this.bullet.rings) {
+          ctx.save();
+          ctx.translate(r.x, r.y); ctx.rotate(r.ang);
+          ctx.globalAlpha = Math.max(0, r.life / r.max) * 0.85;
+          ctx.strokeStyle = '#fef08a'; ctx.lineWidth = 0.06;
+          ctx.beginPath(); ctx.ellipse(0, 0, r.r * 0.34, r.r, 0, 0, Math.PI * 2); ctx.stroke();
+          ctx.restore();
+        }
+      }
+
       for (const a of arrows) if (a.state === 'idle' || a.state === 'bumping') this.drawArrow(a, th);
       for (const a of arrows) if (a.state === 'exiting') this.drawArrow(a, th);
+
+      for (const r of this.impactRings) {
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, r.life / r.max);
+        ctx.strokeStyle = r.col; ctx.lineWidth = 0.08;
+        ctx.beginPath(); ctx.arc(r.x, r.y, r.r, 0, Math.PI * 2); ctx.stroke();
+        ctx.restore();
+      }
 
       for (const p of this.particles) {
         ctx.globalAlpha = Math.max(0, p.life / p.max); ctx.fillStyle = p.col;
@@ -711,12 +1027,31 @@ window.AE = window.AE || {};
       for (const pop of this.popups) {
         ctx.globalAlpha = Math.min(1, pop.life / (pop.max * 0.5));
         ctx.font = '800 0.42px "Segoe UI", sans-serif';
-        ctx.lineWidth = 0.12; ctx.strokeStyle = 'rgba(15,23,42,0.85)';
+        ctx.lineWidth = 0.12; ctx.strokeStyle = 'rgba(15,23,42,0.88)';
         ctx.strokeText(pop.txt, pop.x, pop.y);
         ctx.fillStyle = pop.col; ctx.fillText(pop.txt, pop.x, pop.y);
       }
       ctx.globalAlpha = 1;
       ctx.restore();
+
+      if (this.intro.active) this.drawScreenFlyers(this.intro.flyers, 0.72);
+      if (this.celebrate.active) this.drawScreenFlyers(this.celebrate.flyers, 0.92);
+    },
+
+    drawScreenFlyers(flyers, baseAlpha) {
+      for (const f of flyers) {
+        ctx.save();
+        ctx.translate(f.x, f.y); ctx.rotate(f.ang);
+        ctx.globalAlpha = (f.life !== undefined ? f.life : 1) * baseAlpha;
+        ctx.strokeStyle = f.col; ctx.fillStyle = f.col;
+        ctx.lineWidth = 5; ctx.lineCap = 'round';
+        ctx.beginPath(); ctx.moveTo(-f.len / 2, 0); ctx.lineTo(f.len / 2 - 10, 0); ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(f.len / 2 + 6, 0); ctx.lineTo(f.len / 2 - 14, -10);
+        ctx.lineTo(f.len / 2 - 9, 0); ctx.lineTo(f.len / 2 - 14, 10);
+        ctx.closePath(); ctx.fill();
+        ctx.restore();
+      }
     },
 
     drawBlackHole(cx, cy) {
@@ -739,36 +1074,85 @@ window.AE = window.AE || {};
       const st = AE.Powers.getStyle(a, th);
       const lw = th.style === 'ink' ? 0.135 : 0.165;
 
-      ctx.save(); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-      ctx.globalAlpha = st.alpha;
+      ctx.save();
+      ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+
+      if (this.intro.active) {
+        const rawP = Math.max(0, Math.min(1, (this.intro.t - a.introDelay) / 0.52));
+        const ease = 1 - Math.pow(1 - rawP, 3);
+        const off = (1 - ease) * a.introDist;
+        ctx.translate(-a.dir.x * off, -a.dir.y * off);
+        ctx.globalAlpha = Math.max(0.05, ease) * st.alpha;
+      } else {
+        ctx.globalAlpha = st.alpha;
+      }
+
+      const is3D = a.state === 'exiting' && (a.type !== 'normal' || a.isBulletFinal);
+      const lift = is3D ? Math.min(1, 0.35 + a.slide * 0.22) : 0;
+
+      if (is3D) {
+        ctx.save();
+        ctx.translate(0.14 * lift, 0.24 * lift);
+        ctx.strokeStyle = 'rgba(2, 6, 23, 0.45)';
+        ctx.lineWidth = lw * 1.15;
+        this.strokePoly(points, 0.1);
+        ctx.restore();
+
+        ctx.translate(-0.04 * lift, -0.09 * lift);
+
+        const depthLayers = a.isBulletFinal ? 4 : 2;
+        for (let k = depthLayers; k >= 1; k--) {
+          ctx.save();
+          ctx.translate(0.025 * k, 0.045 * k);
+          ctx.strokeStyle = a.isBulletFinal ? '#b45309' : 'rgba(15,23,42,0.55)';
+          ctx.lineWidth = lw * (a.isBulletFinal ? 1.25 : 1.08);
+          this.strokePoly(points, 0.1);
+          ctx.restore();
+        }
+      }
 
       if (a.hintGlow > 0) {
-        ctx.save(); ctx.strokeStyle = 'rgba(34,197,94,0.58)';
-        ctx.lineWidth = lw + 0.22 + Math.sin(this.clock * 10) * 0.05;
+        ctx.save(); ctx.strokeStyle = 'rgba(34,197,94,0.62)';
+        ctx.lineWidth = lw + 0.24 + Math.sin(this.clock * 10) * 0.05;
         this.strokePoly(points, 0.1); ctx.restore();
       }
-      if (st.glow || th.style === 'neon' || th.style === 'fire') {
+
+      if (st.glow || th.style === 'neon' || th.style === 'fire' || a.isBulletFinal) {
         ctx.save();
-        ctx.strokeStyle = st.glow || (th.style === 'fire' ? 'rgba(249,115,22,0.38)' : 'rgba(56,189,248,0.34)');
-        ctx.lineWidth = lw + 0.11; this.strokePoly(points, 0.1); ctx.restore();
+        ctx.strokeStyle = a.isBulletFinal ? 'rgba(253,224,71,0.68)'
+          : (st.glow || (th.style === 'fire' ? 'rgba(249,115,22,0.38)' : 'rgba(56,189,248,0.34)'));
+        ctx.lineWidth = lw + (a.isBulletFinal ? 0.20 : 0.11);
+        this.strokePoly(points, 0.1); ctx.restore();
       }
 
-      ctx.strokeStyle = st.col; ctx.lineWidth = lw;
+      ctx.strokeStyle = a.isBulletFinal ? '#f59e0b' : st.col;
+      ctx.lineWidth = a.isBulletFinal ? lw * 1.22 : lw;
       this.strokePoly(points, 0.1);
 
-      if (th.style !== 'ink' || a.type !== 'normal') {
-        ctx.save(); ctx.strokeStyle = st.hi; ctx.globalAlpha = 0.52; ctx.lineWidth = lw * 0.34;
-        ctx.translate(-0.018, -0.02); this.strokePoly(points, 0.14); ctx.restore();
+      if (th.style !== 'ink' || a.type !== 'normal' || a.isBulletFinal) {
+        ctx.save();
+        ctx.strokeStyle = a.isBulletFinal ? '#fffbeb' : st.hi;
+        ctx.globalAlpha = a.isBulletFinal ? 0.9 : 0.56;
+        ctx.lineWidth = lw * 0.36;
+        ctx.translate(-0.02, -0.024);
+        this.strokePoly(points, 0.14);
+        ctx.restore();
       }
 
       if (headScale > 0.08) {
-        ctx.save(); ctx.translate(last.x, last.y); ctx.rotate(ang); ctx.scale(headScale, headScale);
-        ctx.fillStyle = st.col;
+        ctx.save(); ctx.translate(last.x, last.y); ctx.rotate(ang);
+        const hs = headScale * (a.isBulletFinal ? 1.28 : (is3D ? 1.12 : 1));
+        ctx.scale(hs, hs);
+        if (is3D) {
+          ctx.fillStyle = 'rgba(15,23,42,0.45)';
+          ctx.beginPath(); ctx.moveTo(0.18, 0.05); ctx.lineTo(-0.13, -0.17); ctx.lineTo(-0.06, 0.05); ctx.lineTo(-0.13, 0.25); ctx.closePath(); ctx.fill();
+        }
+        ctx.fillStyle = a.isBulletFinal ? '#fde047' : st.col;
         ctx.beginPath(); ctx.moveTo(0.14, 0); ctx.lineTo(-0.17, -0.21); ctx.lineTo(-0.10, 0); ctx.lineTo(-0.17, 0.21); ctx.closePath();
         ctx.fill(); ctx.restore();
       }
 
-      if (a.type === 'bomb' && a.state === 'idle') {
+      if (AE.Powers.isBomb(a) && a.state === 'idle') {
         const tail = points[0], f = 0.07 + Math.sin(this.clock * 24) * 0.035;
         ctx.fillStyle = '#fde047'; ctx.beginPath(); ctx.arc(tail.x, tail.y, f + 0.035, 0, Math.PI * 2); ctx.fill();
         ctx.fillStyle = '#f97316'; ctx.beginPath(); ctx.arc(tail.x, tail.y, f, 0, Math.PI * 2); ctx.fill();
@@ -797,7 +1181,7 @@ window.AE = window.AE || {};
 
     badge(x, y, txt, bg, fg, ring) {
       ctx.save(); ctx.fillStyle = bg; ctx.strokeStyle = ring; ctx.lineWidth = 0.055;
-      ctx.beginPath(); ctx.arc(x, y, 0.24, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.arc(x, y, 0.25, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
       ctx.fillStyle = fg; ctx.font = '800 0.25px "Segoe UI", sans-serif';
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillText(txt, x, y + 0.01); ctx.restore();
@@ -816,7 +1200,7 @@ window.AE = window.AE || {};
         <div><div class="t-name">${AE.tr('unlockedAuto')}</div><div class="t-sub">${p.selectedTheme === 'auto' ? AE.tr('equipped') : AE.tr('owned')}</div></div>`;
       autoBtn.onclick = () => {
         p.selectedTheme = 'auto';
-        if (this.lvl) this.theme = AE.getActiveTheme(p, this.lvl.level);
+        if (this.lvl) { this.theme = AE.getActiveTheme(p, this.lvl.level); AE.applyThemeUI(this.theme); }
         AE.Vault.save(p); this.openThemesModal();
       };
       grid.appendChild(autoBtn);
@@ -834,10 +1218,12 @@ window.AE = window.AE || {};
         card.onclick = () => {
           if (unlocked) {
             p.selectedTheme = th.idx; this.theme = th;
+            if (this.currentScreen === 'screenGame') AE.applyThemeUI(th);
             AE.AudioFX.coin(); AE.Vault.save(p); this.openThemesModal();
           } else if (p.coins >= th.price) {
             p.coins -= th.price; p.boughtThemes.push(th.idx);
             p.selectedTheme = th.idx; this.theme = th;
+            if (this.currentScreen === 'screenGame') AE.applyThemeUI(th);
             AE.AudioFX.win(); AE.Vault.save(p);
             this.refreshHomeUI(); if (this.lvl) this.updateGameHUD();
             this.openThemesModal();
@@ -863,7 +1249,7 @@ window.AE = window.AE || {};
             <div class="shop-ico">${it.ico}</div>
             <div>
               <div style="font-size:13.5px; font-weight:800;">${it.name}</div>
-              <div style="font-size:11px; color:#64748b; font-weight:600;">${it.desc} (${p[it.key]})</div>
+              <div style="font-size:11px; color:var(--ui-muted); font-weight:600;">${it.desc} (${p[it.key]})</div>
             </div>
           </div>
           <button class="shop-buy">
@@ -886,9 +1272,7 @@ window.AE = window.AE || {};
       const pct = Math.round(p.volume * 100);
       document.getElementById('volSlider').value = pct;
       document.getElementById('volPct').textContent = pct + '%';
-      const vb = document.getElementById('vibToggleBtn');
-      vb.textContent = p.vibration ? 'ON' : 'OFF';
-      vb.classList.toggle('on', p.vibration);
+      document.getElementById('vibToggleBtn').classList.toggle('on', p.vibration);
       document.getElementById('settingsModal').classList.add('open');
     },
 
@@ -962,8 +1346,8 @@ window.AE = window.AE || {};
         btn.onclick = () => document.getElementById(btn.getAttribute('data-close')).classList.remove('open');
       });
 
-      // Touch / Pinch / Mouse Pan & Zoom
       canvas.addEventListener('pointerdown', e => {
+        if (this.bullet.active) return;
         canvas.setPointerCapture(e.pointerId);
         this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
         if (this.pointers.size === 1) {
@@ -978,7 +1362,7 @@ window.AE = window.AE || {};
       });
 
       canvas.addEventListener('pointermove', e => {
-        if (!this.pointers.has(e.pointerId)) return;
+        if (!this.pointers.has(e.pointerId) || this.bullet.active) return;
         this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
         if (this.pointers.size === 1 && this.dragStart) {
           const dx = e.clientX - this.dragStart.x, dy = e.clientY - this.dragStart.y;
@@ -1019,6 +1403,7 @@ window.AE = window.AE || {};
       canvas.addEventListener('pointercancel', endPtr);
 
       canvas.addEventListener('wheel', e => {
+        if (this.bullet.active) return;
         e.preventDefault();
         const w0 = this.screenToWorld(e.clientX, e.clientY);
         this.cam.scale = Math.max(this.cam.minScale, Math.min(this.cam.maxScale, this.cam.scale * (e.deltaY < 0 ? 1.12 : 0.89)));
