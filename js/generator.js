@@ -60,43 +60,80 @@ AE.PuzzleBuilder = {
     return true;
   },
 
+  // Level 1-45: +2 arrows/level | Level 46-100: +1 arrow/level | 100+: 140-200 + IQ tuning
+  computeTargetArrows(level, skill, isBoss) {
+    let base;
+    if (level <= 45) base = 6 + level * 2;
+    else if (level <= 100) base = 96 + (level - 45);
+    else base = 150 + ((level * 7) % 35);
+
+    const iqDelta = Math.round(((skill - 48) / 52) * Math.min(14, level * 0.6));
+    let target = base + iqDelta + (isBoss ? 12 : 0);
+    return Math.max(6, Math.min(200, target));
+  },
+
   build(level, snapshot) {
     const rng = this.mulberry32(snapshot.seed);
     const skill = snapshot.skillSnap;
     const isBoss = level > 1 && level % 10 === 0;
     const skillFactor = (skill - 45) / 55;
-    const prog = Math.min(1, Math.log2(level + 1) / 5.8);
+    const targetArrows = this.computeTargetArrows(level, skill, isBoss);
 
-    let W = Math.round(7 + prog * 10 + skillFactor * 2.4 + (isBoss ? 2 : 0));
-    if (level === 1) W = 8;
-    if (level === 2) W = 9;
-    W = Math.max(7, Math.min(19, W));
-    const H = Math.min(21, W + (W >= 11 ? 2 : 1));
+    const neededCells = targetArrows * 4.3;
+    let W = Math.max(8, Math.min(25, Math.round(Math.sqrt(neededCells / 0.58))));
+    let H = Math.min(27, W + 2);
 
-    const maxLen = Math.max(3, Math.min(11, Math.round(4 + prog * 5 + skillFactor * 1.8)));
-    const bendChance = Math.max(0.32, Math.min(0.86, 0.40 + prog * 0.34 + skillFactor * 0.12));
+    let shapeObj = AE.Shapes.getForLevel(level, W, H, rng);
+    let mask = shapeObj.mask;
+    const countActive = m => m.reduce((s, row) => s + row.reduce((a, v) => a + v, 0), 0);
 
-    const { name: shapeName, mask } = AE.Shapes.getForLevel(level, W, H, rng);
+    if (countActive(mask) < targetArrows * 3.4 && W < 25) {
+      W = Math.min(25, W + 4);
+      H = Math.min(27, H + 4);
+      shapeObj = AE.Shapes.getForLevel(level, W, H, rng);
+      mask = shapeObj.mask;
+    }
 
+    const shapeName = shapeObj.name;
     const activeCells = [];
     for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (mask[y][x]) activeCells.push({ x, y });
 
     // Black Holes
     const blackHoles = [], bhSet = new Set();
     const effLvl = level + Math.max(0, Math.round(skillFactor * 4));
-    if (effLvl >= 4 && (isBoss || level % 3 === 1)) {
-      const bhCount = (isBoss && W >= 13) ? 2 : 1;
+    if (effLvl >= 4 && (isBoss || level % 3 === 1 || targetArrows >= 45)) {
+      const bhCount = targetArrows >= 60 ? 2 : 1;
       const inner = activeCells.filter(c => c.x >= 2 && c.x <= W - 3 && c.y >= 2 && c.y <= H - 3 &&
-        Math.hypot(c.x - (W - 1) / 2, c.y - (H - 1) / 2) < W * 0.34);
+        Math.hypot(c.x - (W - 1) / 2, c.y - (H - 1) / 2) < W * 0.36);
       for (let i = 0; i < bhCount && inner.length > 0; i++) {
         const pick = inner.splice(Math.floor(rng() * inner.length), 1)[0];
-        if (blackHoles.some(b => Math.hypot(b.x - pick.x, b.y - pick.y) < 3)) continue;
+        if (blackHoles.some(b => Math.hypot(b.x - pick.x, b.y - pick.y) < 3.5)) continue;
         blackHoles.push(pick); bhSet.add(pick.y * W + pick.x); mask[pick.y][pick.x] = 0;
       }
     }
 
-    // Fill shape densely with acyclic snake arrows
+    // Varied Arrow Lengths (Short 2-3, Medium 4-6, Long Snakes 7-13)
+    const bendChance = Math.max(0.35, Math.min(0.88, 0.44 + Math.min(0.32, level * 0.008) + skillFactor * 0.12));
+    const pickDesiredLen = () => {
+      const r = rng();
+      if (r < 0.44) return 2 + Math.floor(rng() * 2);
+      if (r < 0.80) return 4 + Math.floor(rng() * 3);
+      return 7 + Math.floor(rng() * Math.min(7, 3 + Math.floor(level / 8)));
+    };
+
     const occ = Array.from({ length: H }, () => Array(W).fill(0));
+    const rayHits = Array.from({ length: H }, () => Array(W).fill(0));
+    const markExitRay = (arrow) => {
+      const n = arrow.cells.length, h = arrow.cells[n - 1], k = arrow.cells[n - 2];
+      const dx = h.x - k.x, dy = h.y - k.y;
+      let cx = h.x + dx, cy = h.y + dy;
+      while (cx >= 0 && cx < W && cy >= 0 && cy < H) {
+        if (bhSet.has(cy * W + cx)) break;
+        rayHits[cy][cx]++;
+        cx += dx; cy += dy;
+      }
+    };
+
     const arrows = [];
     let nextId = 1;
 
@@ -109,7 +146,8 @@ AE.PuzzleBuilder = {
           const nx = cur.x + d.x, ny = cur.y + d.y;
           if (nx < 0 || nx >= W || ny < 0 || ny >= H || !mask[ny][nx] || occ[ny][nx] || vis.has(ny * W + nx)) continue;
           const same = lastD && lastD.x === d.x && lastD.y === d.y;
-          opts.push({ x: nx, y: ny, d, w: (same ? 1 - bendChance : bendChance) + 0.08 });
+          const trapBonus = (skill >= 58 && rayHits[ny][nx] > 0) ? 0.45 : 0;
+          opts.push({ x: nx, y: ny, d, w: (same ? 1 - bendChance : bendChance) + 0.08 + trapBonus });
         }
         if (!opts.length) break;
         let tot = opts.reduce((s, o) => s + o.w, 0), r = rng() * tot, pick = opts[0];
@@ -119,30 +157,79 @@ AE.PuzzleBuilder = {
       return path;
     };
 
-    const maxAttempts = W * H * 6;
-    for (let att = 0; att < maxAttempts; att++) {
+    const cxMid = (W - 1) / 2, cyMid = (H - 1) / 2;
+    const allOrdered = activeCells
+      .filter(c => mask[c.y][c.x] === 1)
+      .sort((a, b) => (Math.hypot(a.x - cxMid, a.y - cyMid) + (rng() - 0.5) * 3) -
+                      (Math.hypot(b.x - cxMid, b.y - cyMid) + (rng() - 0.5) * 3));
+
+    const maxFastPass = Math.max(W * H * 4, targetArrows * 14);
+    let ptr = 0;
+
+    for (let att = 0; att < maxFastPass && arrows.length < targetArrows; att++) {
+      let start = null;
+      if (att < allOrdered.length * 2) {
+        for (let tries = 0; tries < 8; tries++) {
+          const c = allOrdered[ptr % allOrdered.length]; ptr++;
+          if (!occ[c.y][c.x]) { start = c; break; }
+        }
+      }
+      if (!start) {
+        const free = [];
+        for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (mask[y][x] && !occ[y][x]) free.push({ x, y });
+        if (free.length < 2) break;
+        start = free[Math.floor(rng() * free.length)];
+      }
+
+      const raw = growSnake(start, pickDesiredLen());
+      if (raw.length < 2) continue;
+
+      const orients = [raw, [...raw].reverse()];
+      if (rng() < 0.5) orients.reverse();
+
+      let bestCand = null, bestScore = -999;
+      for (const cells of orients) {
+        if (!this.isSelfClean(cells, bhSet, W, H)) continue;
+        const cand = { id: nextId, cells, type: 'normal' };
+        const esc = this.canEscapeBasic(cand, occ, bhSet, W, H);
+        if (esc.ok) {
+          let blocks = 0;
+          for (const c of cells) if (rayHits[c.y][c.x] > 0) blocks++;
+          const score = (esc.viaBH ? 3 : 0) + (skill >= 55 ? blocks * 1.4 : -blocks * 0.2) + rng();
+          if (score > bestScore) { bestScore = score; bestCand = cand; }
+        }
+      }
+
+      if (bestCand) {
+        for (const c of bestCand.cells) occ[c.y][c.x] = bestCand.id;
+        markExitRay(bestCand);
+        arrows.push(bestCand);
+        nextId++;
+      }
+    }
+
+    let solverChecks = 0;
+    while (arrows.length < targetArrows && solverChecks < 38) {
       const free = [];
       for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (mask[y][x] && !occ[y][x]) free.push({ x, y });
       if (free.length < 2) break;
       const start = free[Math.floor(rng() * free.length)];
-      const raw = growSnake(start, 2 + Math.floor(rng() * (maxLen - 1)));
-      if (raw.length < 2) continue;
-      const orients = rng() < 0.5 ? [raw, [...raw].reverse()] : [[...raw].reverse(), raw];
-      let accepted = null;
-      for (const cells of orients) {
+      const raw = growSnake(start, 2 + Math.floor(rng() * 3));
+      if (raw.length < 2) { solverChecks++; continue; }
+
+      let added = false;
+      for (const cells of [raw, [...raw].reverse()]) {
         if (!this.isSelfClean(cells, bhSet, W, H)) continue;
         const cand = { id: nextId, cells, type: 'normal' };
+        solverChecks++;
         if (this.canEscapeBasic(cand, occ, bhSet, W, H).ok || this.solve([...arrows, cand], bhSet, W, H)) {
-          accepted = cand; break;
+          for (const c of cand.cells) occ[c.y][c.x] = cand.id;
+          arrows.push(cand); nextId++; added = true; break;
         }
       }
-      if (accepted) {
-        for (const c of accepted.cells) occ[c.y][c.x] = accepted.id;
-        arrows.push(accepted); nextId++;
-      }
+      if (!added) solverChecks++;
     }
 
-    // Assign Super Powers via js/powers.js
     const sol = this.solve(arrows, bhSet, W, H);
     AE.Powers.assignToBoard({
       arrows,
@@ -151,10 +238,13 @@ AE.PuzzleBuilder = {
       occ, bhSet, W, H, level, effLvl, skill, isBoss, rng
     });
 
-    for (const a of arrows) {
+    for (let idx = 0; idx < arrows.length; idx++) {
+      const a = arrows[idx];
       a.state = 'idle'; a.slide = 0; a.speed = 0;
       a.bumpDir = 1; a.bumpMax = 0.35; a.flash = 0; a.hintGlow = 0;
-      a.exitMode = 'edge'; a.bhDist = 0;
+      a.exitMode = 'edge'; a.bhDist = 0; a.isBulletFinal = false;
+      a.introDelay = (idx / Math.max(1, arrows.length)) * 0.28;
+      a.introDist = 5.5 + (idx % 5) * 1.1;
       a.pts = a.cells.map(c => ({ x: c.x + 0.5, y: c.y + 0.5 }));
       const n = a.cells.length;
       a.dir = { x: a.cells[n - 1].x - a.cells[n - 2].x, y: a.cells[n - 1].y - a.cells[n - 2].y };
