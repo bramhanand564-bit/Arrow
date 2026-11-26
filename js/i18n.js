@@ -18,7 +18,8 @@ AE.I18N = {
     shopTitle: '⚡ Power-Up Shop', shopSub: 'Spend gold coins on super boosters!',
     lvlWin: n => `Level ${n} Complete!`, bossWin: n => `👑 Boss Level ${n} Cleared!`,
     gameOver: 'Level Failed', nextLvl: n => `Play Level ${n} ➡️`,
-    replay: 'Replay Level 🔄', retry: 'Try Again 🔄',
+    replay: '🔄 Replay', home: '🏠 Home', retry: 'Try Again 🔄',
+    victory: 'VICTORY!', awesome: 'AWESOME!', levelIntro: n => `LEVEL ${n}`,
     failHearts: 'Out of hearts! Watch the arrow paths carefully.',
     failBomb: '💥 Countdown Bomb exploded! Clear bomb arrows before 0.',
     needCoins: c => `Need ${c} coins!`,
@@ -31,28 +32,19 @@ AE.I18N = {
     lvlUnlockTag: n => `Unlocks Lvl ${n}`,
     equipped: 'Equipped ✓', owned: 'Tap to Use',
     hintNormal: '💡 Follow the glowing green arrow!',
-    hintBomb: '💣 BOMB ARROW: Release it before its counter reaches 0 or it explodes!',
-    hintKiller: '⚡ LASER STRIKER: Tap it to slice straight through blocking arrows!',
-    hintNova: '🌟 NOVA BURST: Releasing it clears all free arrows facing the same way!',
-    hintGhost: '👻 GHOST PHASE: Passes right through 1 blocking arrow ahead!',
-    hintElectric: '⚡ SHOCK CHAIN: Zaps an extra random arrow off the board!',
-    hintFire: '🔥 FIREBALL: Melts a nearby blocker when released!',
-    hintKey: '🔑 GOLDEN KEY: Release this first to unlock the chained Lock arrow!',
-    hintBonus: '👑 JACKPOT ARROW: Release for bonus gold coins or +1 Heart!',
     hintBH: '🌀 BLACK HOLE: Arrows pointing into it vanish instantly!',
     howToHtml: `
       <b>How to Play:</b><br>
       • Tap any arrow whose straight path ahead is clear.<br>
-      • Use <b>Pinch-to-Zoom</b> and drag to inspect small dense arrows.<br>
+      • Use <b>Pinch-to-Zoom</b> & drag on dense high levels.<br>
       • Avoid bumping into blocking arrows (3 Hearts per level).<br><br>
-      <b>Special Powers:</b><br>
-      • <b>💣 Bomb:</b> Clear before move count hits 0.<br>
-      • <b>🌀 Black Hole:</b> Instant shortcut exit.<br>
-      • <b>⚡ Laser Striker:</b> Cuts through blockers ahead.<br>
-      • <b>👻 Ghost:</b> Phases through 1 blocker.<br>
-      • <b>🌟 Nova Burst:</b> Clears matching free arrows.<br>
-      • <b>❄️ Frost:</b> Melts as you clear other arrows.<br>
-      • <b>🔑 Key & 🔒 Lock:</b> Clear Key to open Lock.
+      <b>50+ Special Arrows & Powers:</b><br>
+      • <b>💣 Bombs & Defusers:</b> Clear before 0 or extend moves.<br>
+      • <b>⚡ Lasers, Katana & Railgun:</b> Slice straight through blockers.<br>
+      • <b>👻 Ghost & Phantom:</b> Phase smoothly through obstacles.<br>
+      • <b>🌈 Nova, Rockets & Magnet:</b> Trigger massive chain clears.<br>
+      • <b>🌀 Black Hole:</b> Direct shortcut exit right inside the board.<br>
+      • Tap <b>💡 Hint</b> anytime to inspect any special arrow!
     `,
     privacyHtml: `
       <b>Privacy Policy (Google Play Compliant)</b><br>
@@ -80,7 +72,8 @@ AE.I18N = {
     shopTitle: '⚡ पावर-अप शॉप', shopSub: 'जीते हुए गोल्ड कॉइन्स से सुपर बूस्टर्स खरीदें!',
     lvlWin: n => `लेवल ${n} पूरा हुआ!`, bossWin: n => `👑 बॉस लेवल ${n} पार!`,
     gameOver: 'लेवल फेल', nextLvl: n => `लेवल ${n} खेलें ➡️`,
-    replay: 'दोबारा खेलें 🔄', retry: 'फिर से कोशिश करें 🔄',
+    replay: '🔄 दोबारा', home: '🏠 होम', retry: 'फिर से कोशिश करें 🔄',
+    victory: 'शानदार जीत!', awesome: 'जबरदस्त!', levelIntro: n => `लेवल ${n}`,
     failHearts: 'सारे दिल खत्म हो गए! सही रास्ता देखकर टैप करें।',
     failBomb: '💥 बम फट गया! गिनती 0 होने से पहले बम ऐरो निकालें।',
     needCoins: c => `${c} कॉइन्स चाहिए!`,
@@ -93,28 +86,19 @@ AE.I18N = {
     lvlUnlockTag: n => `लेवल ${n} पर खुलेगा`,
     equipped: 'लगा हुआ है ✓', owned: 'चुनने के लिए टैप करें',
     hintNormal: '💡 चमकते हुए हरे तीर पर टैप करें!',
-    hintBomb: '💣 बम ऐरो: गिनती 0 होने से पहले इसे बाहर निकालें वरना धमाका होगा!',
-    hintKiller: '⚡ लेज़र स्ट्राइकर: सामने आने वाले सारे ब्लॉकिंग तीरों को काटकर निकल जाता है!',
-    hintNova: '🌟 नोवा बर्स्ट: इसे निकालते ही उसी दिशा के बाकी खाली तीर भी उड़ जाते हैं!',
-    hintGhost: '👻 घोस्ट तीर: सामने खड़े 1 ब्लॉकिंग तीर के आर-पार निकल जाता है!',
-    hintElectric: '⚡ शॉक चेन: निकलते वक्त 1 एक्स्ट्रा तीर को बिजली से गायब कर देता है!',
-    hintFire: '🔥 फायरबॉल: आस-पास के एक ब्लॉकर को जलाकर खत्म कर देता है!',
-    hintKey: '🔑 गोल्डन चाबी: पहले इसे निकालें ताकि ताले वाला तीर खुल सके!',
-    hintBonus: '👑 जैकपॉट तीर: इसे निकालने पर एक्स्ट्रा कॉइन्स या +1 दिल मिलता है!',
     hintBH: '🌀 ब्लैक होल: इसकी तरफ जाने वाले तीर सीधे इसमें समाकर निकल जाते हैं!',
     howToHtml: `
       <b>कैसे खेलें:</b><br>
       • जिस तीर के आगे का रास्ता खाली है उस पर टैप करें।<br>
-      • छोटे और घने तीरों को देखने के लिए <b>Pinch-to-Zoom</b> करें।<br>
+      • बड़े व घने लेवल्स में <b>Pinch-to-Zoom</b> करके छोटे तीर ढूँढें।<br>
       • टकराने से बचें (हर लेवल में 3 दिल मिलते हैं)।<br><br>
-      <b>सुपर पावर्स:</b><br>
-      • <b>💣 बम:</b> गिनती 0 होने से पहले निकालें।<br>
+      <b>50+ स्पेशल तीर और पावर्स:</b><br>
+      • <b>💣 बम व डिफ्यूज़र:</b> गिनती 0 होने से पहले निकालें।<br>
+      • <b>⚡ लेज़र, कटाना व रेलगन:</b> सामने के ब्लॉकर काटकर निकलें।<br>
+      • <b>👻 घोस्ट व फैंटम:</b> ब्लॉकर के आर-पार निकल जाएं।<br>
+      • <b>🌈 नोवा, रॉकेट व मैग्नेट:</b> कई तीर एक साथ साफ करें।<br>
       • <b>🌀 ब्लैक होल:</b> बीच से ही सीधा बाहर निकलने का रास्ता।<br>
-      • <b>⚡ लेज़र:</b> रास्ते के ब्लॉकर काटकर निकलता है।<br>
-      • <b>👻 घोस्ट:</b> 1 ब्लॉकर के आर-पार जा सकता है।<br>
-      • <b>🌟 नोवा:</b> एक दिशा के खाली तीर साथ ले जाता है।<br>
-      • <b>❄️ बर्फ:</b> बाकी तीर हटाने पर पिघलती है।<br>
-      • <b>🔑 चाबी & 🔒 ताला:</b> चाबी निकालने पर ताला खुलेगा।
+      • किसी भी स्पेशल तीर की जानकारी के लिए <b>💡 हिंट</b> दबाएं!
     `,
     privacyHtml: `
       <b>प्राइवेसी पॉलिसी (Google Play मानकों के अनुसार)</b><br>
