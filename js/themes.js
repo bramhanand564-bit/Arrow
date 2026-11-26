@@ -1,5 +1,19 @@
 window.AE = window.AE || {};
 
+function hexToRgb(hex) {
+  const h = hex.replace('#', '');
+  return {
+    r: parseInt(h.slice(0, 2), 16),
+    g: parseInt(h.slice(2, 4), 16),
+    b: parseInt(h.slice(4, 6), 16)
+  };
+}
+
+function isDarkHex(hex) {
+  const { r, g, b } = hexToRgb(hex);
+  return (r * 0.299 + g * 0.587 + b * 0.114) < 140;
+}
+
 AE.THEMES_50 = [
   // [Name, Background, AccentBg, ArrowMain, ArrowHi, DotColor, Style, CoinPrice]
   ['Classic Ink',      '#f8fafc', '#eef2f7', '#0f172a', '#475569', 'rgba(100,116,139,0.28)', 'ink',    0],
@@ -54,6 +68,7 @@ AE.THEMES_50 = [
   ['Apex Legend',      '#141008', '#261e0e', '#fde047', '#ffffff', 'rgba(253,224,71,0.28)',  'gold',  1500]
 ].map((t, idx) => ({
   idx, name: t[0], bg: t[1], bg2: t[2], main: t[3], hi: t[4], dot: t[5], style: t[6], price: t[7],
+  isDark: isDarkHex(t[1]),
   unlockLevel: idx === 0 ? 1 : idx * 10 + 1
 }));
 
@@ -68,4 +83,42 @@ AE.getActiveTheme = function(profile, level) {
   }
   const autoIdx = Math.floor((level - 1) / 10) % AE.THEMES_50.length;
   return AE.THEMES_50[autoIdx];
+};
+
+// Dynamically themes the ENTIRE Power Dock, Top HUD, Win Screen & Settings!
+AE.applyThemeUI = function(th) {
+  const r = document.documentElement.style;
+  const ac = hexToRgb(th.main);
+  const bg = hexToRgb(th.bg2);
+
+  if (th.isDark) {
+    r.setProperty('--ui-panel', `rgba(${Math.min(255, bg.r + 14)}, ${Math.min(255, bg.g + 16)}, ${Math.min(255, bg.b + 24)}, 0.84)`);
+    r.setProperty('--ui-dock', `rgba(${Math.min(255, bg.r + 10)}, ${Math.min(255, bg.g + 12)}, ${Math.min(255, bg.b + 20)}, 0.88)`);
+    r.setProperty('--ui-btn', `rgba(${Math.min(255, bg.r + 24)}, ${Math.min(255, bg.g + 28)}, ${Math.min(255, bg.b + 38)}, 0.94)`);
+    r.setProperty('--ui-modal', `rgba(${Math.min(255, bg.r + 12)}, ${Math.min(255, bg.g + 15)}, ${Math.min(255, bg.b + 24)}, 0.96)`);
+    r.setProperty('--ui-card-sub', `rgba(255, 255, 255, 0.08)`);
+    r.setProperty('--ui-text', '#f8fafc');
+    r.setProperty('--ui-muted', 'rgba(203, 213, 225, 0.72)');
+    r.setProperty('--ui-border', `rgba(${ac.r}, ${ac.g}, ${ac.b}, 0.36)`);
+    r.setProperty('--ui-accent', th.main);
+    r.setProperty('--ui-accent2', th.bg2);
+    r.setProperty('--ui-glow', `rgba(${ac.r}, ${ac.g}, ${ac.b}, 0.32)`);
+  } else {
+    r.setProperty('--ui-panel', `rgba(${Math.min(255, bg.r + 16)}, ${Math.min(255, bg.g + 16)}, ${Math.min(255, bg.b + 16)}, 0.92)`);
+    r.setProperty('--ui-dock', `rgba(${Math.min(255, bg.r + 18)}, ${Math.min(255, bg.g + 18)}, ${Math.min(255, bg.b + 18)}, 0.94)`);
+    r.setProperty('--ui-btn', '#ffffff');
+    r.setProperty('--ui-modal', `rgba(${Math.min(255, bg.r + 20)}, ${Math.min(255, bg.g + 20)}, ${Math.min(255, bg.b + 20)}, 0.97)`);
+    r.setProperty('--ui-card-sub', `rgba(${ac.r}, ${ac.g}, ${ac.b}, 0.08)`);
+    r.setProperty('--ui-text', '#0f172a');
+    r.setProperty('--ui-muted', '#64748b');
+    r.setProperty('--ui-border', `rgba(${ac.r}, ${ac.g}, ${ac.b}, 0.22)`);
+    r.setProperty('--ui-accent', th.idx === 0 ? '#2563eb' : th.main);
+    r.setProperty('--ui-accent2', th.idx === 0 ? '#1d4ed8' : th.main);
+    r.setProperty('--ui-glow', `rgba(${ac.r}, ${ac.g}, ${ac.b}, 0.22)`);
+  }
+};
+
+// Sleek Dark Royal Glass UI when on Home / Levels Screen
+AE.resetHomeThemeUI = function() {
+  AE.applyThemeUI(AE.THEMES_50[3]); // Cyber Navy Glass matches Home Screen
 };
